@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.11 python3.11-venv python3-pip \
     supervisor \
     ca-certificates \
+    git \
     debian-keyring debian-archive-keyring apt-transport-https gnupg curl \
     iproute2 iputils-ping iptables \
     && rm -rf /var/lib/apt/lists/*
