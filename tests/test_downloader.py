@@ -142,3 +142,53 @@ class TestDownloadOne:
         assert result.success is True
         assert dest.parent.is_dir()
         assert dest.read_bytes() == b"data"
+
+
+from launcher.downloader import download_many
+
+
+class TestDownloadMany:
+    def test_downloads_all_models_in_parallel(self, tmp_path: Path, monkeypatch):
+        monkeypatch.delenv("CIVITAI_TOKEN", raising=False)
+        items = [
+            {"url": f"https://huggingface.co/m{i}", "dest": tmp_path / f"m{i}.bin"}
+            for i in range(3)
+        ]
+        fake_response = MagicMock()
+        fake_response.__enter__ = MagicMock(return_value=fake_response)
+        fake_response.__exit__ = MagicMock(return_value=False)
+        fake_response.read = MagicMock(side_effect=[b"data", b""] * 3)
+
+        with patch("urllib.request.urlopen", return_value=fake_response):
+            results = download_many(items, max_parallel=3)
+
+        assert len(results) == 3
+        assert all(r.success for r in results)
+
+    def test_respects_priority_order(self, tmp_path: Path):
+        # Higher priority is downloaded first
+        call_order = []
+
+        def fake_urlopen(req, timeout=None):
+            call_order.append(req.full_url)
+            m = MagicMock()
+            m.__enter__ = MagicMock(return_value=m)
+            m.__exit__ = MagicMock(return_value=False)
+            m.read = MagicMock(side_effect=[b"data", b""])
+            return m
+
+        items = [
+            {"url": "https://huggingface.co/low", "dest": tmp_path / "low.bin", "priority": 0},
+            {"url": "https://huggingface.co/high", "dest": tmp_path / "high.bin", "priority": 10},
+            {"url": "https://huggingface.co/mid", "dest": tmp_path / "mid.bin", "priority": 5},
+        ]
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            results = download_many(items, max_parallel=1)  # serial to enforce order
+
+        # Priority 10, then 5, then 0
+        assert call_order == [
+            "https://huggingface.co/high",
+            "https://huggingface.co/mid",
+            "https://huggingface.co/low",
+        ]

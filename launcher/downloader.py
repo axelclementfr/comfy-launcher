@@ -4,7 +4,9 @@ import os
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from itertools import groupby
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -115,3 +117,37 @@ def download_one(
             error=f"{type(e).__name__}: {e}",
             elapsed_sec=time.time() - t0,
         )
+
+
+def download_many(
+    items: list[dict],
+    max_parallel: int = 3,
+    progress_callback: Callable[[str, int], None] | None = None,
+) -> list[DownloadResult]:
+    """Download a list of {url, dest, priority?} dicts.
+
+    Higher-priority items are downloaded first. Within the same priority,
+    items are downloaded in parallel up to `max_parallel`.
+
+    `progress_callback(url, bytes)` is called as each item progresses.
+    """
+    # Sort by priority descending (high first), stable order otherwise
+    sorted_items = sorted(items, key=lambda x: -x.get("priority", 0))
+
+    results: list[DownloadResult] = []
+    for priority, group in groupby(sorted_items, key=lambda x: -x.get("priority", 0)):
+        batch = list(group)
+        with ThreadPoolExecutor(max_workers=max_parallel) as executor:
+            futures = []
+            for item in batch:
+                cb = (lambda u: lambda b: progress_callback(u, b))(item["url"]) \
+                    if progress_callback else None
+                futures.append(executor.submit(
+                    download_one,
+                    url=item["url"],
+                    dest=Path(item["dest"]),
+                    progress_callback=cb,
+                ))
+            for f in futures:
+                results.append(f.result())
+    return results
