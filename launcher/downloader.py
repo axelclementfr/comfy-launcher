@@ -21,12 +21,22 @@ def clean_token(raw: Optional[str]) -> str:
 
 
 def build_url(url: str) -> str:
-    """Inject ?token=XXX into Civitai URLs (their canonical auth method)."""
+    """Inject ?token=XXX into Civitai URLs (their canonical auth method).
+
+    Preserves URL fragments correctly: token goes before the fragment, not after.
+    """
     if "civitai.com" in url:
         token = clean_token(os.environ.get("CIVITAI_TOKEN", ""))
         if token:
-            sep = "&" if "?" in url else "?"
-            return f"{url}{sep}token={token}"
+            if "#" in url:
+                base, fragment = url.split("#", 1)
+            else:
+                base, fragment = url, ""
+            sep = "&" if "?" in base else "?"
+            result = f"{base}{sep}token={token}"
+            if fragment:
+                result = f"{result}#{fragment}"
+            return result
     return url
 
 

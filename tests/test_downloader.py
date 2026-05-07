@@ -49,6 +49,11 @@ class TestBuildUrl:
         url = "https://huggingface.co/foo/bar/resolve/main/file.safetensors"
         assert build_url(url) == url
 
+    def test_civitai_with_fragment_preserves_fragment(self, monkeypatch):
+        monkeypatch.setenv("CIVITAI_TOKEN", "secret123")
+        url = "https://civitai.com/api/download/models/6297#section"
+        assert build_url(url) == "https://civitai.com/api/download/models/6297?token=secret123#section"
+
 
 class TestGetHeaders:
     def test_user_agent_always_set(self, monkeypatch):
