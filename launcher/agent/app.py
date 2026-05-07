@@ -34,8 +34,10 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
 
 
 def build_app() -> FastAPI:
+    from launcher.agent.routes_install import router as install_router
     app = FastAPI(title="comfy-launcher agent", version="0.1.0")
     app.add_middleware(BearerAuthMiddleware)
+    app.include_router(install_router)
 
     @app.get("/health")
     async def health():
