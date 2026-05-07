@@ -11,8 +11,12 @@ TEST_TOKEN="smoke-token-$(date +%s)"
 MANIFEST_JSON='{"version":1,"models":[]}'
 MANIFEST_B64="$(echo -n "$MANIFEST_JSON" | base64 -w0)"
 
-echo "==> Building image"
-docker build -t "$IMAGE_TAG" .
+echo "==> Building image (skip if already present, e.g. from CI)"
+if ! docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
+    docker build -t "$IMAGE_TAG" .
+else
+    echo "    image $IMAGE_TAG already present, skipping build"
+fi
 
 echo "==> Cleaning any prior container"
 docker rm -f "$CONTAINER_NAME" 2>/dev/null || true

@@ -46,10 +46,19 @@ def run_boot(
         })
 
     logger.info("boot: %d models to download", len(items))
+    # Log progress every 100 MB to avoid flooding logs on big DLs
+    last_logged: dict[str, int] = {}
+
+    def _throttled_progress(url: str, bytes_so_far: int) -> None:
+        last = last_logged.get(url, 0)
+        if bytes_so_far - last >= 100 * 1024 * 1024 or last == 0:
+            logger.info("dl %s: %d MB", url, bytes_so_far // (1024 * 1024))
+            last_logged[url] = bytes_so_far
+
     results: list[DownloadResult] = download_many(
         items,
         max_parallel=3,
-        progress_callback=lambda url, n: logger.info("dl %s: %d bytes", url, n),
+        progress_callback=_throttled_progress,
     )
 
     succ = sum(1 for r in results if r.success)

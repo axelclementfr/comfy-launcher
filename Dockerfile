@@ -47,6 +47,7 @@ RUN mkdir -p \
     /workspace/ComfyUI/models/loras \
     /workspace/ComfyUI/models/vae \
     /workspace/ComfyUI/models/controlnet \
+    /workspace/ComfyUI/models/diffusion_models \
     /workspace/ComfyUI/models/upscale_models \
     /workspace/ComfyUI/models/embeddings \
     /workspace/ComfyUI/models/clip \
@@ -56,7 +57,6 @@ RUN mkdir -p \
 COPY launcher /opt/launcher/launcher
 COPY scripts /opt/launcher/scripts
 COPY pyproject.toml /opt/launcher/pyproject.toml
-RUN pip install fastapi uvicorn[standard] pydantic
 RUN pip install -e /opt/launcher
 
 # supervisord + Caddy configs
