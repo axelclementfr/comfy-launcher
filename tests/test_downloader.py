@@ -81,3 +81,64 @@ class TestGetHeaders:
         monkeypatch.setenv("HF_TOKEN", '"hf_secret"')
         h = get_headers("https://huggingface.co/foo")
         assert h["Authorization"] == "Bearer hf_secret"
+
+
+import urllib.error
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+from launcher.downloader import download_one, DownloadResult
+
+
+class TestDownloadOne:
+    def test_successful_download_writes_file(self, tmp_path: Path, monkeypatch):
+        monkeypatch.delenv("CIVITAI_TOKEN", raising=False)
+        dest = tmp_path / "model.safetensors"
+        fake_response = MagicMock()
+        fake_response.__enter__ = MagicMock(return_value=fake_response)
+        fake_response.__exit__ = MagicMock(return_value=False)
+        # Simulate 2 chunks then EOF
+        fake_response.read = MagicMock(side_effect=[b"x" * 1024, b"y" * 512, b""])
+
+        with patch("urllib.request.urlopen", return_value=fake_response):
+            result = download_one(
+                url="https://huggingface.co/foo/bar",
+                dest=dest,
+            )
+
+        assert result.success is True
+        assert result.bytes_written == 1536
+        assert dest.read_bytes() == b"x" * 1024 + b"y" * 512
+
+    def test_http_error_returns_failure(self, tmp_path: Path):
+        dest = tmp_path / "model.safetensors"
+        err = urllib.error.HTTPError(
+            url="https://example.com", code=403, msg="Forbidden",
+            hdrs=None, fp=None,
+        )
+
+        with patch("urllib.request.urlopen", side_effect=err):
+            result = download_one(
+                url="https://example.com/model",
+                dest=dest,
+            )
+
+        assert result.success is False
+        assert "403" in result.error
+        assert not dest.exists()
+
+    def test_creates_parent_directory(self, tmp_path: Path):
+        dest = tmp_path / "deep" / "nested" / "model.safetensors"
+        fake_response = MagicMock()
+        fake_response.__enter__ = MagicMock(return_value=fake_response)
+        fake_response.__exit__ = MagicMock(return_value=False)
+        fake_response.read = MagicMock(side_effect=[b"data", b""])
+
+        with patch("urllib.request.urlopen", return_value=fake_response):
+            result = download_one(
+                url="https://huggingface.co/foo/bar",
+                dest=dest,
+            )
+
+        assert result.success is True
+        assert dest.parent.is_dir()
+        assert dest.read_bytes() == b"data"

@@ -1,7 +1,12 @@
 """Download logic shared by boot script and agent."""
 from __future__ import annotations
 import os
-from typing import Optional
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable, Optional
 
 UA = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -48,3 +53,65 @@ def get_headers(url: str) -> dict[str, str]:
         if token:
             headers["Authorization"] = f"Bearer {token}"
     return headers
+
+
+@dataclass
+class DownloadResult:
+    success: bool
+    bytes_written: int = 0
+    elapsed_sec: float = 0.0
+    error: str = ""
+
+
+def download_one(
+    url: str,
+    dest: Path,
+    timeout_sec: int = 600,
+    progress_callback: Callable[[int], None] | None = None,
+) -> DownloadResult:
+    """Download `url` to `dest`. Auth headers + ?token= are applied automatically.
+
+    `progress_callback` (if provided) is called with running byte count every chunk.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fetch_url = build_url(url)
+    headers = get_headers(url)
+    req = urllib.request.Request(fetch_url, headers=headers)
+    t0 = time.time()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp, open(dest, "wb") as out:
+            total = 0
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                out.write(chunk)
+                total += len(chunk)
+                if progress_callback is not None:
+                    progress_callback(total)
+        return DownloadResult(
+            success=True,
+            bytes_written=total,
+            elapsed_sec=time.time() - t0,
+        )
+    except urllib.error.HTTPError as e:
+        if dest.exists():
+            dest.unlink()
+        body_snippet = ""
+        try:
+            body_snippet = e.read()[:200].decode(errors="replace")
+        except Exception:
+            pass
+        return DownloadResult(
+            success=False,
+            error=f"HTTP {e.code} {e.reason} :: {body_snippet}",
+            elapsed_sec=time.time() - t0,
+        )
+    except Exception as e:
+        if dest.exists():
+            dest.unlink()
+        return DownloadResult(
+            success=False,
+            error=f"{type(e).__name__}: {e}",
+            elapsed_sec=time.time() - t0,
+        )
