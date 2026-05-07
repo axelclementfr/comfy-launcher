@@ -1,0 +1,27 @@
+{
+    # Disable HTTPS auto since we're on internal network behind Tailscale
+    auto_https off
+}
+
+# ComfyUI on :8188 - public-facing port
+:8188 {
+    # Bearer auth: reject if not matching $LAUNCHER_AGENT_TOKEN
+    @authorized header Authorization "Bearer {env.LAUNCHER_AGENT_TOKEN}"
+    handle @authorized {
+        reverse_proxy 127.0.0.1:18188
+    }
+    handle {
+        respond "unauthorized" 401
+    }
+}
+
+# Agent on :7777 - public-facing port
+:7777 {
+    @authorized header Authorization "Bearer {env.LAUNCHER_AGENT_TOKEN}"
+    handle @authorized {
+        reverse_proxy 127.0.0.1:7878
+    }
+    handle {
+        respond "unauthorized" 401
+    }
+}
